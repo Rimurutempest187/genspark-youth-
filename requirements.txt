@@ -1,1 +1,18 @@
-python-telegram-bot --upgrade
+# Core Telegram Bot Library
+python-telegram-bot==20.7
+
+# Async Support (usually comes with python-telegram-bot)
+python-telegram-bot[all]==20.7
+
+# Additional useful libraries
+pytz==2023.3
+python-dateutil==2.8.2
+
+# For better JSON handling
+ujson==5.9.0
+
+# For scheduling (optional - for future scheduled features)
+APScheduler==3.10.4
+
+# For environment variables (optional - for better configuration)
+python-dotenv==1.0.0
