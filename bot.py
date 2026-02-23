@@ -588,21 +588,45 @@ async def quiz_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await query.edit_message_text(result_text, parse_mode=ParseMode.MARKDOWN)
 
+import html
 async def tops(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /tops command"""
+    
+    # ၁။ Score ရှိမရှိ စစ်ဆေးခြင်း
     if not bot_data.quiz_scores:
         await update.message.reply_text("🏆 Quiz အမှတ်များ မရှိသေးပါ။")
         return
     
-    sorted_scores = sorted(bot_data.quiz_scores.items(), key=lambda x: x[1]['score'], reverse=True)
-    
-    tops_text = "🏆 **Quiz Top Scores**\n\n"
-    for idx, (user_id, data) in enumerate(sorted_scores[:10], 1):
-        medal = "🥇" if idx == 1 else "🥈" if idx == 2 else "🥉" if idx == 3 else f"{idx}."
-        tops_text += f"{medal} {data['name']} - {data['score']} points\n"
-    
-    tops_text += "\n━━━━━━━━━━━━━━━\n✨ Created by: PINLON-YOUTH"
-    await update.message.reply_text(tops_text, parse_mode=ParseMode.MARKDOWN)
+    try:
+        # ၂။ Score အများဆုံးသူကို အစဉ်လိုက် စီခြင်း
+        sorted_scores = sorted(
+            bot_data.quiz_scores.items(), 
+            key=lambda x: x[1].get('score', 0), 
+            reverse=True
+        )
+        
+        # ၃။ HTML format ဖြင့် စာသားတည်ဆောက်ခြင်း
+        tops_text = "<b>🏆 Quiz Top Scores</b>\n\n"
+        
+        for idx, (user_id, data) in enumerate(sorted_scores[:10], 1):
+            # ပထမ၊ ဒုတိယ၊ တတိယကို ရွှေ၊ ငွေ၊ ကြေး ဆုတံဆိပ်ပြောင်းခြင်း
+            medal = "🥇" if idx == 1 else "🥈" if idx == 2 else "🥉" if idx == 3 else f"{idx}."
+            
+            # နာမည်ထဲမှာ ပါနိုင်တဲ့ special characters တွေကို HTML အဖြစ်ပြောင်းလဲခြင်း
+            safe_name = html.escape(str(data.get('name', 'Unknown')))
+            score = data.get('score', 0)
+            
+            tops_text += f"{medal} {safe_name} - <b>{score}</b> points\n"
+        
+        tops_text += "\n━━━━━━━━━━━━━━━\n✨ Created by: <b>PINLON-YOUTH</b>"
+        
+        # ၄။ ParseMode.HTML ကို သုံးပြီး message ပို့ခြင်း
+        await update.message.reply_text(tops_text, parse_mode=ParseMode.HTML)
+
+    except Exception as e:
+        # အမှားတစ်ခုခုတက်ရင် log ထုတ်ကြည့်ရန်
+        print(f"Error in tops command: {e}")
+        await update.message.reply_text("❌ Ranking ပြသရာတွင် အမှားအယွင်း တစ်ခုရှိနေပါသည်။")
 
 async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /broadcast command"""
