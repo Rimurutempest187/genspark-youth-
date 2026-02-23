@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Church Community Telegram Bot
+Church Community Telegram Bot (fixed)
 Created by: PINLON-YOUTH
+Fixed & improved by: ChatGPT
 """
 
 import os
 import json
 import random
 import logging
-from datetime import datetime, time
-from typing import Dict, List, Optional
+import re
+from datetime import datetime
+from typing import Optional
 from dotenv import load_dotenv
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -61,7 +63,7 @@ class BotData:
         self.quiz_threshold = 10
         self.users = set()
         self.groups = set()
-        
+
     def to_dict(self):
         return {
             'about': self.about,
@@ -75,9 +77,9 @@ class BotData:
             'message_count': self.message_count,
             'quiz_threshold': self.quiz_threshold,
             'users': list(self.users),
-            'groups': list(self.groups)
+            'groups': list(self.groups),
         }
-    
+
     @classmethod
     def from_dict(cls, data):
         bot_data = cls()
@@ -99,7 +101,7 @@ class BotData:
 bot_data = BotData()
 
 # Utility functions
-def save_data():
+def save_data() -> bool:
     """Save bot data to JSON file"""
     try:
         with open(DATA_FILE, 'w', encoding='utf-8') as f:
@@ -107,10 +109,11 @@ def save_data():
         logger.info("Data saved successfully")
         return True
     except Exception as e:
-        logger.error(f"Error saving data: {e}")
+        logger.exception(f"Error saving data: {e}")
         return False
 
-def load_data():
+
+def load_data() -> bool:
     """Load bot data from JSON file"""
     global bot_data
     try:
@@ -121,12 +124,16 @@ def load_data():
             logger.info("Data loaded successfully")
             return True
     except Exception as e:
-        logger.error(f"Error loading data: {e}")
+        logger.exception(f"Error loading data: {e}")
     return False
 
-def is_admin(user_id: int) -> bool:
+
+def is_admin(user_id: Optional[int]) -> bool:
     """Check if user is admin"""
+    if not user_id:
+        return False
     return user_id in ADMIN_IDS
+
 
 def get_current_month_birthdays():
     """Get birthdays for current month"""
@@ -134,19 +141,20 @@ def get_current_month_birthdays():
     monthly_birthdays = [b for b in bot_data.birthdays if b.get('month') == current_month]
     return monthly_birthdays
 
+
 # Command handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /start command"""
     user = update.effective_user
     chat = update.effective_chat
-    
+
     # Track users and groups
-    if chat.type == 'private':
+    if chat and chat.type == 'private':
         bot_data.users.add(user.id)
-    else:
+    elif chat:
         bot_data.groups.add(chat.id)
     save_data()
-    
+
     welcome_text = f"""
 🙏 ကြိုဆိုပါတယ် {user.first_name}!
 
@@ -167,15 +175,20 @@ Church Community Bot မှ ကြိုဆိုပါတယ်။
 ━━━━━━━━━━━━━━━
 ✨ Created by: PINLON-YOUTH
 """
-    
-    await update.message.reply_text(welcome_text)
+
+    # send
+    if update.message:
+        await update.message.reply_text(welcome_text)
+    elif update.effective_chat:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=welcome_text)
+
 
 async def edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /edit command - Admin only"""
     if not is_admin(update.effective_user.id):
         await update.message.reply_text("⚠️ သင်သည် Admin မဟုတ်ပါ။")
         return
-    
+
     admin_text = """
 🔧 Admin Commands:
 
@@ -199,17 +212,19 @@ async def edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 """
     await update.message.reply_text(admin_text)
 
+
 async def edabout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /edabout command"""
     if not is_admin(update.effective_user.id):
         await update.message.reply_text("⚠️ သင်သည် Admin မဟုတ်ပါ။")
         return ConversationHandler.END
-    
+
     await update.message.reply_text(
         "📝 အသင်းတော်၏ သမိုင်းကြောင်းနှင့် ရည်ရွယ်ချက်ကို ရေးသားပါ:\n\n"
         "ပယ်ဖျက်ရန် /cancel"
     )
     return EDIT_ABOUT
+
 
 async def receive_about(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Receive about text"""
@@ -217,6 +232,7 @@ async def receive_about(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_data()
     await update.message.reply_text("✅ အသင်းတော်အကြောင်း သိမ်းဆည်းပြီးပါပြီ။")
     return ConversationHandler.END
+
 
 async def about(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /about command"""
@@ -229,12 +245,13 @@ async def about(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("📝 အချက်အလက်များ မရှိသေးပါ။")
 
+
 async def edcontact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /edcontact command"""
     if not is_admin(update.effective_user.id):
         await update.message.reply_text("⚠️ သင်သည် Admin မဟုတ်ပါ။")
         return ConversationHandler.END
-    
+
     await update.message.reply_text(
         "📞 ဆက်သွယ်ရန်အချက်အလက်များထည့်ပါ:\n\n"
         "Format: အမည် - ဖုန်းနံပါတ်\n"
@@ -245,15 +262,20 @@ async def edcontact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return EDIT_CONTACT
 
+
 async def receive_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Receive contact info"""
     contacts = update.message.text.strip().split('\n')
+    added = 0
     for contact in contacts:
-        if contact.strip():
-            bot_data.contacts.append(contact.strip())
+        contact = contact.strip()
+        if contact:
+            bot_data.contacts.append(contact)
+            added += 1
     save_data()
-    await update.message.reply_text(f"✅ ဆက်သွယ်ရန်အချက်အလက် {len(contacts)} ခု ထည့်ပြီးပါပြီ။")
+    await update.message.reply_text(f"✅ ဆက်သွယ်ရန်အချက်အလက် {added} ခု ထည့်ပြီးပါပြီ။")
     return ConversationHandler.END
+
 
 async def contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /contact command"""
@@ -266,12 +288,13 @@ async def contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("📝 ဆက်သွယ်ရန်အချက်အလက် မရှိသေးပါ။")
 
+
 async def edverse(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /edverse command"""
     if not is_admin(update.effective_user.id):
         await update.message.reply_text("⚠️ သင်သည် Admin မဟုတ်ပါ။")
         return ConversationHandler.END
-    
+
     await update.message.reply_text(
         "📖 ကျမ်းချက်များထည့်ပါ:\n\n"
         "Format: ကျမ်းချက် - အကိုးအကား\n"
@@ -280,6 +303,7 @@ async def edverse(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "တစ်ကြောင်းချင်းစီ ရေးပါ။ ပယ်ဖျက်ရန် /cancel"
     )
     return EDIT_VERSE
+
 
 async def receive_verse(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Receive verse"""
@@ -293,13 +317,14 @@ async def receive_verse(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"✅ ကျမ်းချက် {count} ခု ထည့်ပြီးပါပြီ။")
     return ConversationHandler.END
 
+
 async def verse(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /verse command"""
     if bot_data.verses:
         random_verse = random.choice(bot_data.verses)
         now = datetime.now(TIMEZONE)
         greeting = "🌅 မင်္ဂလာနံနက်ခင်းပါ" if now.hour < 12 else "🌙 မင်္ဂလာညပါ"
-        
+
         await update.message.reply_text(
             f"{greeting}\n\n"
             f"📖 **ယနေ့အတွက် ကျမ်းချက်**\n\n"
@@ -310,12 +335,13 @@ async def verse(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("📝 ကျမ်းချက်များ မရှိသေးပါ။")
 
+
 async def edevents(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /edevents command"""
     if not is_admin(update.effective_user.id):
         await update.message.reply_text("⚠️ သင်သည် Admin မဟုတ်ပါ။")
         return ConversationHandler.END
-    
+
     await update.message.reply_text(
         "📅 အစီအစဉ်များထည့်ပါ:\n\n"
         "Format: ရက်စွဲ - အစီအစဉ်အမည်\n"
@@ -325,6 +351,7 @@ async def edevents(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "တစ်ကြောင်းချင်းစီ ရေးပါ။ ပယ်ဖျက်ရန် /cancel"
     )
     return EDIT_EVENTS
+
 
 async def receive_events(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Receive events"""
@@ -338,6 +365,7 @@ async def receive_events(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"✅ အစီအစဉ် {count} ခု ထည့်ပြီးပါပြီ။")
     return ConversationHandler.END
 
+
 async def events(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /events command"""
     if bot_data.events:
@@ -349,12 +377,13 @@ async def events(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("📝 အစီအစဉ်များ မရှိသေးပါ။")
 
+
 async def edbirthday(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /edbirthday command"""
     if not is_admin(update.effective_user.id):
         await update.message.reply_text("⚠️ သင်သည် Admin မဟုတ်ပါ။")
         return ConversationHandler.END
-    
+
     await update.message.reply_text(
         "🎂 မွေးနေ့များထည့်ပါ:\n\n"
         "Format: လ-ရက် - အမည်\n"
@@ -365,31 +394,51 @@ async def edbirthday(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return EDIT_BIRTHDAY
 
+
 async def receive_birthday(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Receive birthdays"""
-    birthdays = update.message.text.strip().split('\n')
+    """Receive birthdays. Expected formats:
+    3-15 - Name
+    03-05 - Name
+    """
+    text = update.message.text.strip()
+    lines = [l.strip() for l in text.split('\n') if l.strip()]
     count = 0
-    for birthday in birthdays:
-        if birthday.strip() and '-' in birthday:
+    for line in lines:
+        # pattern: month-day - name
+        m = re.match(r"^(\d{1,2})\s*-\s*(\d{1,2})\s*-\s*(.+)$", line)
+        if m:
             try:
-                date_part, name = birthday.split('-', 2)[0:2], birthday.split('-', 2)[2]
-                month, day = map(int, date_part[0].split('-'))
-                bot_data.birthdays.append({
-                    'month': month,
-                    'day': day,
-                    'name': name.strip()
-                })
-                count += 1
-            except:
+                month = int(m.group(1))
+                day = int(m.group(2))
+                name = m.group(3).strip()
+                if 1 <= month <= 12 and 1 <= day <= 31:
+                    bot_data.birthdays.append({'month': month, 'day': day, 'name': name})
+                    count += 1
+            except Exception:
                 continue
+        else:
+            # try alternate pattern: mm-dd name (no second hyphen)
+            m2 = re.match(r"^(\d{1,2})\s*-\s*(\d{1,2})\s+[-:]?\s*(.+)$", line)
+            if m2:
+                try:
+                    month = int(m2.group(1))
+                    day = int(m2.group(2))
+                    name = m2.group(3).strip()
+                    if 1 <= month <= 12 and 1 <= day <= 31:
+                        bot_data.birthdays.append({'month': month, 'day': day, 'name': name})
+                        count += 1
+                except Exception:
+                    continue
+
     save_data()
     await update.message.reply_text(f"✅ မွေးနေ့ {count} ခု ထည့်ပြီးပါပြီ။")
     return ConversationHandler.END
 
+
 async def birthday(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /birthday command"""
     monthly_birthdays = get_current_month_birthdays()
-    
+
     if monthly_birthdays:
         current_month = datetime.now(TIMEZONE).strftime('%B')
         birthday_text = f"🎂 **{current_month} လ မွေးနေ့များ**\n\n"
@@ -400,6 +449,7 @@ async def birthday(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("🎂 ယခုလတွင် မွေးနေ့များ မရှိပါ။")
 
+
 async def pray(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /pray command"""
     if not context.args:
@@ -408,31 +458,32 @@ async def pray(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "/pray သင့်ဆုတောင်းခံချက်"
         )
         return
-    
+
     prayer_text = ' '.join(context.args)
     user = update.effective_user
-    
+
     prayer_entry = {
         'user_id': user.id,
         'username': user.username or user.first_name,
         'prayer': prayer_text,
         'date': datetime.now(TIMEZONE).strftime('%Y-%m-%d %H:%M:%S')
     }
-    
+
     bot_data.prayers.append(prayer_entry)
     save_data()
-    
+
     await update.message.reply_text(
         "✅ သင့်ဆုတောင်းခံချက်ကို လက်ဝယ်ရရှိပြီး ဆုတောင်းပေးပါမည်။\n\n"
         "━━━━━━━━━━━━━━━\n✨ Created by: PINLON-YOUTH"
     )
+
 
 async def praylist(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /praylist command - Admin only"""
     if not is_admin(update.effective_user.id):
         await update.message.reply_text("⚠️ သင်သည် Admin မဟုတ်ပါ။")
         return
-    
+
     if bot_data.prayers:
         prayer_text = "🙏 **ဆုတောင်းခံချက်စာရင်း**\n\n"
         for idx, prayer in enumerate(bot_data.prayers[-20:], 1):  # Last 20
@@ -443,12 +494,13 @@ async def praylist(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("📝 ဆုတောင်းခံချက်များ မရှိသေးပါ။")
 
+
 async def set_quiz_threshold(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /set command"""
     if not is_admin(update.effective_user.id):
         await update.message.reply_text("⚠️ သင်သည် Admin မဟုတ်ပါ။")
         return
-    
+
     if not context.args or not context.args[0].isdigit():
         await update.message.reply_text(
             "⚙️ Quiz ကျမည့် message အရေအတွက်သတ်မှတ်ရန်:\n\n"
@@ -456,19 +508,20 @@ async def set_quiz_threshold(update: Update, context: ContextTypes.DEFAULT_TYPE)
             f"လက်ရှိ: {bot_data.quiz_threshold} messages"
         )
         return
-    
+
     bot_data.quiz_threshold = int(context.args[0])
     save_data()
     await update.message.reply_text(
         f"✅ Quiz threshold ကို {bot_data.quiz_threshold} messages သို့ သတ်မှတ်ပြီးပါပြီ။"
     )
 
+
 async def edquiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /edquiz command"""
     if not is_admin(update.effective_user.id):
         await update.message.reply_text("⚠️ သင်သည် Admin မဟုတ်ပါ။")
         return ConversationHandler.END
-    
+
     await update.message.reply_text(
         "❓ Quiz များထည့်ပါ:\n\n"
         "Format:\n"
@@ -483,101 +536,121 @@ async def edquiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return EDIT_QUIZ
 
+
 async def receive_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Receive quizzes"""
     quiz_blocks = update.message.text.strip().split('\n\n')
     count = 0
-    
+
     for block in quiz_blocks:
-        lines = block.strip().split('\n')
+        lines = [l.strip() for l in block.strip().split('\n') if l.strip()]
         if len(lines) >= 6:
-            quiz = {
-                'question': lines[0],
-                'choices': {
-                    'A': lines[1].replace('A)', '').strip(),
-                    'B': lines[2].replace('B)', '').strip(),
-                    'C': lines[3].replace('C)', '').strip(),
-                    'D': lines[4].replace('D)', '').strip()
-                },
-                'answer': lines[5].replace('အဖြေ:', '').strip().upper()
-            }
-            bot_data.quizzes.append(quiz)
-            count += 1
-    
+            # tolerate either 'A) text' or 'A)text'
+            choices = {}
+            for ch_line in lines[1:5]:
+                m = re.match(r"^([A-Da-d])\)\s*(.+)$", ch_line)
+                if m:
+                    choices[m.group(1).upper()] = m.group(2).strip()
+            answer_line = lines[5]
+            ans_m = re.search(r"([A-Da-d])", answer_line)
+            if ans_m and len(choices) == 4:
+                quiz = {
+                    'question': lines[0],
+                    'choices': choices,
+                    'answer': ans_m.group(1).upper()
+                }
+                bot_data.quizzes.append(quiz)
+                count += 1
+
     save_data()
     await update.message.reply_text(f"✅ Quiz {count} ခု ထည့်ပြီးပါပြီ။")
     return ConversationHandler.END
 
+
 async def track_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Track messages for auto quiz"""
     chat_id = str(update.effective_chat.id)
-    
+
     if chat_id not in bot_data.message_count:
         bot_data.message_count[chat_id] = 0
-    
+
     bot_data.message_count[chat_id] += 1
-    
+
     if bot_data.message_count[chat_id] >= bot_data.quiz_threshold and bot_data.quizzes:
         bot_data.message_count[chat_id] = 0
         save_data()
+        # send quiz into the same chat by creating a pseudo-update-like object
         await send_quiz(update, context)
+
 
 async def quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /quiz command"""
     await send_quiz(update, context)
 
+
 async def send_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Send a random quiz"""
     if not bot_data.quizzes:
-        await update.message.reply_text("📝 Quiz များ မရှိသေးပါ။")
+        if update.message:
+            await update.message.reply_text("📝 Quiz များ မရှိသေးပါ။")
+        else:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text="📝 Quiz များ မရှိသေးပါ။")
         return
-    
+
     quiz = random.choice(bot_data.quizzes)
     quiz_id = bot_data.quizzes.index(quiz)
-    
+
     quiz_text = f"❓ **Quiz Time!**\n\n{quiz['question']}\n\n"
     quiz_text += f"A) {quiz['choices']['A']}\n"
     quiz_text += f"B) {quiz['choices']['B']}\n"
     quiz_text += f"C) {quiz['choices']['C']}\n"
     quiz_text += f"D) {quiz['choices']['D']}\n"
-    
+
     keyboard = [
         [
             InlineKeyboardButton("A", callback_data=f"quiz_{quiz_id}_A"),
             InlineKeyboardButton("B", callback_data=f"quiz_{quiz_id}_B"),
             InlineKeyboardButton("C", callback_data=f"quiz_{quiz_id}_C"),
-            InlineKeyboardButton("D", callback_data=f"quiz_{quiz_id}_D")
+            InlineKeyboardButton("D", callback_data=f"quiz_{quiz_id}_D"),
         ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await update.message.reply_text(quiz_text, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN)
+
+    if update.message:
+        await update.message.reply_text(quiz_text, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN)
+    else:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=quiz_text, reply_markup=reply_markup)
+
 
 async def quiz_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle quiz answer callback"""
     query = update.callback_query
     await query.answer()
-    
-    data = query.data.split('_')
-    quiz_id = int(data[1])
-    user_answer = data[2]
-    
+
+    parts = query.data.split('_')
+    if len(parts) != 3:
+        await query.edit_message_text("❌ Invalid quiz data.")
+        return
+
+    quiz_id = int(parts[1])
+    user_answer = parts[2]
+
     if quiz_id >= len(bot_data.quizzes):
         await query.edit_message_text("❌ Quiz မရှိတော့ပါ။")
         return
-    
+
     quiz = bot_data.quizzes[quiz_id]
     user_id = str(query.from_user.id)
     username = query.from_user.username or query.from_user.first_name
-    
+
     if user_id not in bot_data.quiz_scores:
         bot_data.quiz_scores[user_id] = {'name': username, 'score': 0}
-    
+
     if user_answer == quiz['answer']:
         bot_data.quiz_scores[user_id]['score'] += 1
         bot_data.quiz_scores[user_id]['name'] = username
         save_data()
-        
+
         result_text = f"✅ **မှန်ကန်ပါသည်!**\n\n"
         result_text += f"အဖြေ: {quiz['answer']}) {quiz['choices'][quiz['answer']]}\n\n"
         result_text += f"🏆 သင့်ရမှတ်: {bot_data.quiz_scores[user_id]['score']}"
@@ -585,55 +658,64 @@ async def quiz_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         result_text = f"❌ **မှားယွင်းနေပါသည်။**\n\n"
         result_text += f"မှန်ကန်သောအဖြေ: {quiz['answer']}) {quiz['choices'][quiz['answer']]}\n\n"
         result_text += f"🏆 သင့်ရမှတ်: {bot_data.quiz_scores[user_id]['score']}"
-    
+
     await query.edit_message_text(result_text, parse_mode=ParseMode.MARKDOWN)
 
-import html
+
+# Helper to save quiz score from other places if needed
+async def save_score(user_id: int, user_name: str, score: int):
+    """Save quiz score to central bot_data and persist."""
+    uid = str(user_id)
+    if uid not in bot_data.quiz_scores:
+        bot_data.quiz_scores[uid] = {'name': user_name, 'score': 0}
+    bot_data.quiz_scores[uid]['score'] += score
+    bot_data.quiz_scores[uid]['name'] = user_name
+    save_data()
+    logger.info(f"Score saved for {user_name}: {bot_data.quiz_scores[uid]['score']}")
+
+
 async def tops(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /tops command"""
-    
-    # ၁။ Score ရှိမရှိ စစ်ဆေးခြင်း
-    if not bot_data.quiz_scores:
+    scores = bot_data.quiz_scores or {}
+
+    if not scores:
         await update.message.reply_text("🏆 Quiz အမှတ်များ မရှိသေးပါ။")
         return
-    
+
     try:
-        # ၂။ Score အများဆုံးသူကို အစဉ်လိုက် စီခြင်း
-        sorted_scores = sorted(
-            bot_data.quiz_scores.items(), 
-            key=lambda x: x[1].get('score', 0), 
-            reverse=True
-        )
-        
-        # ၃။ HTML format ဖြင့် စာသားတည်ဆောက်ခြင်း
+        sorted_scores = sorted(scores.items(), key=lambda item: item[1].get('score', 0), reverse=True)
+
         tops_text = "<b>🏆 Quiz Top Scores</b>\n\n"
-        
+
         for idx, (user_id, data) in enumerate(sorted_scores[:10], 1):
-            # ပထမ၊ ဒုတိယ၊ တတိယကို ရွှေ၊ ငွေ၊ ကြေး ဆုတံဆိပ်ပြောင်းခြင်း
-            medal = "🥇" if idx == 1 else "🥈" if idx == 2 else "🥉" if idx == 3 else f"{idx}."
-            
-            # နာမည်ထဲမှာ ပါနိုင်တဲ့ special characters တွေကို HTML အဖြစ်ပြောင်းလဲခြင်း
-            safe_name = html.escape(str(data.get('name', 'Unknown')))
-            score = data.get('score', 0)
-            
-            tops_text += f"{medal} {safe_name} - <b>{score}</b> points\n"
-        
+            if idx == 1:
+                medal = "🥇"
+            elif idx == 2:
+                medal = "🥈"
+            elif idx == 3:
+                medal = "🥉"
+            else:
+                medal = f"{idx}."
+
+            safe_name = (data.get('name') or 'Unknown')
+            score_points = data.get('score', 0)
+            tops_text += f"{medal} {safe_name} - <b>{score_points}</b> points\n"
+
         tops_text += "\n━━━━━━━━━━━━━━━\n✨ Created by: <b>PINLON-YOUTH</b>"
-        
-        # ၄။ ParseMode.HTML ကို သုံးပြီး message ပို့ခြင်း
+
         await update.message.reply_text(tops_text, parse_mode=ParseMode.HTML)
 
     except Exception as e:
-        # အမှားတစ်ခုခုတက်ရင် log ထုတ်ကြည့်ရန်
-        print(f"Error in tops command: {e}")
-        await update.message.reply_text("❌ Ranking ပြသရာတွင် အမှားအယွင်း တစ်ခုရှိနေပါသည်။")
+        logger.exception(f"Error in tops command: {e}")
+        await update.message.reply_text("❌ Ranking ပြသရာတွင် အမှားအယွင်း တစ်ခုရှိနေပါသည်။ Admin ကို အကြောင်းကြားပေးပါ။")
+
 
 async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /broadcast command"""
     if not is_admin(update.effective_user.id):
         await update.message.reply_text("⚠️ သင်သည် Admin မဟုတ်ပါ။")
         return ConversationHandler.END
-    
+
     await update.message.reply_text(
         "📢 Broadcast Message ပို့ရန်:\n\n"
         "စာသားတစ်ခု သို့မဟုတ် ပုံတစ်ပုံ (caption ပါ) ပို့ပါ။\n\n"
@@ -641,12 +723,12 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return BROADCAST_TEXT
 
+
 async def receive_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Receive and send broadcast message"""
     sent_count = 0
     failed_count = 0
-    
-    # Send to all groups
+
     for group_id in bot_data.groups:
         try:
             if update.message.photo:
@@ -662,9 +744,9 @@ async def receive_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             sent_count += 1
         except Exception as e:
-            logger.error(f"Failed to send to {group_id}: {e}")
+            logger.exception(f"Failed to send to {group_id}: {e}")
             failed_count += 1
-    
+
     await update.message.reply_text(
         f"✅ Broadcast ပို့ပြီးပါပြီ။\n\n"
         f"အောင်မြင်: {sent_count}\n"
@@ -672,12 +754,13 @@ async def receive_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return ConversationHandler.END
 
+
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /stats command"""
     if not is_admin(update.effective_user.id):
         await update.message.reply_text("⚠️ သင်သည် Admin မဟုတ်ပါ။")
         return
-    
+
     stats_text = "📊 **Bot Statistics**\n\n"
     stats_text += f"👥 Users: {len(bot_data.users)}\n"
     stats_text += f"👨‍👩‍👧‍👦 Groups: {len(bot_data.groups)}\n"
@@ -687,8 +770,9 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     stats_text += f"🎂 Birthdays: {len(bot_data.birthdays)}\n"
     stats_text += f"📅 Events: {len(bot_data.events)}\n"
     stats_text += f"📞 Contacts: {len(bot_data.contacts)}\n"
-    
+
     await update.message.reply_text(stats_text, parse_mode=ParseMode.MARKDOWN)
+
 
 async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /report command"""
@@ -698,79 +782,90 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "/report သင့်အကြောင်းအရာ"
         )
         return
-    
+
     report_text = ' '.join(context.args)
     user = update.effective_user
-    
-    # Send to admins
+
     for admin_id in ADMIN_IDS:
         try:
             await context.bot.send_message(
                 chat_id=admin_id,
-                text=f"📝 **New Report**\n\n"
-                     f"From: @{user.username or user.first_name}\n"
-                     f"User ID: {user.id}\n\n"
-                     f"{report_text}",
+                text=f"📝 **New Report**\n\nFrom: @{user.username or user.first_name}\nUser ID: {user.id}\n\n{report_text}",
                 parse_mode=ParseMode.MARKDOWN
             )
-        except:
-            pass
-    
+        except Exception:
+            logger.exception(f"Failed to send report to admin {admin_id}")
+
     await update.message.reply_text("✅ သင့်အကြောင်းကြားချက်ကို လက်ဝယ်ရရှိပြီးပါပြီ။")
+
 
 async def backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /backup command"""
     if not is_admin(update.effective_user.id):
         await update.message.reply_text("⚠️ သင်သည် Admin မဟုတ်ပါ။")
         return
-    
+
     if save_data():
-        with open(DATA_FILE, 'rb') as f:
-            await update.message.reply_document(
-                document=f,
-                filename=f"backup_{datetime.now(TIMEZONE).strftime('%Y%m%d_%H%M%S')}.json",
-                caption="✅ Data Backup လုပ်ပြီးပါပြီ။"
-            )
+        try:
+            with open(DATA_FILE, 'rb') as f:
+                await update.message.reply_document(
+                    document=f,
+                    filename=f"backup_{datetime.now(TIMEZONE).strftime('%Y%m%d_%H%M%S')}.json",
+                    caption="✅ Data Backup လုပ်ပြီးပါပြီ။"
+                )
+        except Exception as e:
+            logger.exception(f"Backup send error: {e}")
+            await update.message.reply_text("❌ Backup ပို့ရာတွင် အမှားတက်နေပါသည်။")
     else:
         await update.message.reply_text("❌ Backup လုပ်ရာတွင် အမှားအယွင်းဖြစ်ပေါ်ခဲ့သည်။")
+
 
 async def restore(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /restore command"""
     if not is_admin(update.effective_user.id):
         await update.message.reply_text("⚠️ သင်သည် Admin မဟုတ်ပါ။")
         return
-    
+
     await update.message.reply_text(
         "📁 Data file ကို ပို့ပါ (.json file):\n\n"
         "ပယ်ဖျက်ရန် /cancel"
     )
 
+
 async def receive_restore_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Receive restore file"""
     if not update.message.document:
         return
-    
+
     if not is_admin(update.effective_user.id):
         return
-    
+
     try:
         file = await update.message.document.get_file()
-        await file.download_to_drive(DATA_FILE)
-        
+        # download as bytes and write to DATA_FILE
+        try:
+            data = await file.download_as_bytearray()
+            with open(DATA_FILE, 'wb') as f:
+                f.write(data)
+        except AttributeError:
+            # fallback for older/newer PTB versions
+            await file.download_to_drive(DATA_FILE)
+
         if load_data():
             await update.message.reply_text("✅ Data ကို ပြန်လည်ရယူပြီးပါပြီ။")
         else:
             await update.message.reply_text("❌ Data file မှားယွင်းနေပါသည်။")
     except Exception as e:
-        logger.error(f"Restore error: {e}")
+        logger.exception(f"Restore error: {e}")
         await update.message.reply_text("❌ ပြန်လည်ရယူရာတွင် အမှားအယွင်းဖြစ်ပေါ်ခဲ့သည်။")
+
 
 async def delete_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /delete command"""
     if not is_admin(update.effective_user.id):
         await update.message.reply_text("⚠️ သင်သည် Admin မဟုတ်ပါ။")
         return
-    
+
     if not context.args:
         await update.message.reply_text(
             "🗑️ Data ဖျက်ရန်:\n\n"
@@ -781,69 +876,71 @@ async def delete_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "/delete birthday နံပါတ်"
         )
         return
-    
+
     data_type = context.args[0].lower()
-    
+
     if len(context.args) < 2 or not context.args[1].isdigit():
         await update.message.reply_text("⚠️ နံပါတ်ထည့်ပါ။")
         return
-    
+
     index = int(context.args[1]) - 1
-    
+
     try:
         if data_type == 'verse' and 0 <= index < len(bot_data.verses):
-            deleted = bot_data.verses.pop(index)
+            bot_data.verses.pop(index)
             save_data()
             await update.message.reply_text(f"✅ ကျမ်းချက် ဖျက်ပြီးပါပြီ။")
         elif data_type == 'quiz' and 0 <= index < len(bot_data.quizzes):
-            deleted = bot_data.quizzes.pop(index)
+            bot_data.quizzes.pop(index)
             save_data()
             await update.message.reply_text(f"✅ Quiz ဖျက်ပြီးပါပြီ။")
         elif data_type == 'event' and 0 <= index < len(bot_data.events):
-            deleted = bot_data.events.pop(index)
+            bot_data.events.pop(index)
             save_data()
             await update.message.reply_text(f"✅ အစီအစဉ် ဖျက်ပြီးပါပြီ။")
         elif data_type == 'contact' and 0 <= index < len(bot_data.contacts):
-            deleted = bot_data.contacts.pop(index)
+            bot_data.contacts.pop(index)
             save_data()
             await update.message.reply_text(f"✅ ဆက်သွယ်ရန် ဖျက်ပြီးပါပြီ။")
         elif data_type == 'birthday' and 0 <= index < len(bot_data.birthdays):
-            deleted = bot_data.birthdays.pop(index)
+            bot_data.birthdays.pop(index)
             save_data()
             await update.message.reply_text(f"✅ မွေးနေ့ ဖျက်ပြီးပါပြီ။")
         else:
             await update.message.reply_text("❌ မှားယွင်းသော အမျိုးအစား သို့မဟုတ် နံပါတ်။")
     except Exception as e:
-        logger.error(f"Delete error: {e}")
+        logger.exception(f"Delete error: {e}")
         await update.message.reply_text("❌ ဖျက်ရာတွင် အမှားအယွင်းဖြစ်ပေါ်ခဲ့သည်။")
+
 
 async def allclear(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /allclear command"""
     if not is_admin(update.effective_user.id):
         await update.message.reply_text("⚠️ သင်သည် Admin မဟုတ်ပါ။")
         return
-    
+
     keyboard = [
         [
             InlineKeyboardButton("✅ Yes, Clear All", callback_data="clear_confirm"),
-            InlineKeyboardButton("❌ Cancel", callback_data="clear_cancel")
+            InlineKeyboardButton("❌ Cancel", callback_data="clear_cancel"),
         ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
+
     await update.message.reply_text(
         "⚠️ **သတိပေးချက်!**\n\n"
         "Data အားလုံးကို ဖျက်ပစ်မှာ သေချာပါသလား?\n"
         "ဤလုပ်ဆောင်ချက်ကို နောက်ပြန်ဆုတ်၍မရနိုင်ပါ။",
         reply_markup=reply_markup,
-        parse_mode=ParseMode.MARKDOWN
+        parse_mode=ParseMode.MARKDOWN,
     )
+
 
 async def allclear_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle allclear confirmation"""
     query = update.callback_query
     await query.answer()
-    
+
     if query.data == "clear_confirm":
         global bot_data
         bot_data = BotData()
@@ -852,76 +949,83 @@ async def allclear_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await query.edit_message_text("❌ ပယ်ဖျက်လိုက်ပါပြီ။")
 
+
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Cancel conversation"""
-    await update.message.reply_text("❌ ပယ်ဖျက်လိုက်ပါပြီ။")
+    if update.message:
+        await update.message.reply_text("❌ ပယ်ဖျက်လိုက်ပါပြီ။")
     return ConversationHandler.END
+
 
 def main():
     """Main function"""
+    if not BOT_TOKEN:
+        logger.error("BOT_TOKEN is not set. Please set BOT_TOKEN in the environment or .env file.")
+        return
+
     # Load data
     load_data()
-    
+
     # Create application
     application = Application.builder().token(BOT_TOKEN).build()
-    
+
     # Conversation handlers
     about_handler = ConversationHandler(
         entry_points=[CommandHandler('edabout', edabout)],
         states={
             EDIT_ABOUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_about)]
         },
-        fallbacks=[CommandHandler('cancel', cancel)]
+        fallbacks=[CommandHandler('cancel', cancel)],
     )
-    
+
     contact_handler = ConversationHandler(
         entry_points=[CommandHandler('edcontact', edcontact)],
         states={
             EDIT_CONTACT: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_contact)]
         },
-        fallbacks=[CommandHandler('cancel', cancel)]
+        fallbacks=[CommandHandler('cancel', cancel)],
     )
-    
+
     verse_handler = ConversationHandler(
         entry_points=[CommandHandler('edverse', edverse)],
         states={
             EDIT_VERSE: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_verse)]
         },
-        fallbacks=[CommandHandler('cancel', cancel)]
+        fallbacks=[CommandHandler('cancel', cancel)],
     )
-    
+
     events_handler = ConversationHandler(
         entry_points=[CommandHandler('edevents', edevents)],
         states={
             EDIT_EVENTS: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_events)]
         },
-        fallbacks=[CommandHandler('cancel', cancel)]
+        fallbacks=[CommandHandler('cancel', cancel)],
     )
-    
+
     birthday_handler = ConversationHandler(
         entry_points=[CommandHandler('edbirthday', edbirthday)],
         states={
             EDIT_BIRTHDAY: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_birthday)]
         },
-        fallbacks=[CommandHandler('cancel', cancel)]
+        fallbacks=[CommandHandler('cancel', cancel)],
     )
-    
+
     quiz_handler = ConversationHandler(
         entry_points=[CommandHandler('edquiz', edquiz)],
         states={
             EDIT_QUIZ: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_quiz)]
         },
-        fallbacks=[CommandHandler('cancel', cancel)]
+        fallbacks=[CommandHandler('cancel', cancel)],
     )
-    
+
     broadcast_handler = ConversationHandler(
         entry_points=[CommandHandler('broadcast', broadcast)],
         states={
             BROADCAST_TEXT: [MessageHandler((filters.TEXT | filters.PHOTO) & ~filters.COMMAND, receive_broadcast)]
         },
-        fallbacks=[CommandHandler('cancel', cancel)]
+        fallbacks=[CommandHandler('cancel', cancel)],
     )
-    
+
     # Add handlers
     application.add_handler(CommandHandler('start', start))
     application.add_handler(CommandHandler('edit', edit_menu))
@@ -951,13 +1055,14 @@ def main():
     application.add_handler(CommandHandler('delete', delete_data))
     application.add_handler(CommandHandler('allclear', allclear))
     application.add_handler(CallbackQueryHandler(allclear_callback, pattern='^clear_'))
-    
-    # Message tracker for auto quiz
+
+    # Message tracker for auto quiz (group index 1)
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, track_messages), group=1)
-    
+
     # Start bot
     logger.info("Bot started...")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
+
 
 if __name__ == '__main__':
     main()
